@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   BookOpen,
@@ -13,6 +15,8 @@ import {
   TrendingUp,
   Trophy,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import type { Profile } from "@/types";
 
 const RECENT_ACTIVITY = [
   {
@@ -54,13 +58,80 @@ const RECENT_ACTIVITY = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [savedNotesCount, setSavedNotesCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const displayName = profile?.full_name || "Student";
+  const displayClass = profile?.class_name || "";
+  const avatarLetter =
+    profile?.full_name?.[0]?.toUpperCase() || "S";
+
+  const welcomeDate = new Date().toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          router.push("/login");
+          return;
+        }
+
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (profileData) {
+          setProfile(profileData as Profile);
+        }
+
+        const { count } = await supabase
+          .from("saved_notes")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        setSavedNotesCount(count ?? 0);
+      } catch {
+        router.push("/login");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, [router]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#FAFAF8]">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#D4AF37] border-t-transparent" />
+          <p className="mt-3 text-sm text-gray-500">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-auto bg-[#FAFAF8]">
       <header className="flex items-center justify-between border-b border-[#E5E7EB] bg-white px-8 py-4">
         <div>
           <h1 className="text-xl font-bold text-[#111111]">My Dashboard</h1>
           <p className="mt-0.5 text-sm text-gray-400">
-            Sunday, 14 June 2026 · Welcome back, Arjun! 👋
+            {welcomeDate} · Welcome back, {displayName.split(" ")[0]}! 👋
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -73,7 +144,7 @@ export default function DashboardPage() {
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
           </button>
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37] text-sm font-bold text-black">
-            A
+            {avatarLetter}
           </div>
         </div>
       </header>
@@ -83,7 +154,7 @@ export default function DashboardPage() {
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#D4AF37] text-2xl font-bold text-black ring-4 ring-[#D4AF37]/20">
-                A
+                {avatarLetter}
               </div>
               <Link
                 href="/dashboard/profile"
@@ -92,11 +163,13 @@ export default function DashboardPage() {
                 Edit Profile
               </Link>
             </div>
-            <h2 className="mt-4 text-xl font-bold text-[#111111]">Arjun Kumar</h2>
+            <h2 className="mt-4 text-xl font-bold text-[#111111]">{displayName}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                Class 10
-              </span>
+              {displayClass && (
+                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+                  Class {displayClass}
+                </span>
+              )}
               <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-600">
                 Student
               </span>
@@ -119,7 +192,7 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition-all hover:shadow-md">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-4xl font-bold text-[#111111]">12</p>
+                  <p className="text-4xl font-bold text-[#111111]">{savedNotesCount}</p>
                   <p className="mt-1 text-sm text-gray-500">Notes Saved</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 const inputClassName =
   "w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none transition-all placeholder:text-gray-400 focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]";
@@ -54,12 +55,32 @@ export default function LoginPage() {
     return !newErrors.email && !newErrors.password;
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!validate()) return;
     setIsLoading(true);
-    setTimeout(() => {
+    setErrors({ email: "", password: "" });
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        setErrors((prev) => ({ ...prev, password: error.message }));
+        return;
+      }
+
       router.push("/dashboard");
-    }, 1500);
+    } catch {
+      setErrors((prev) => ({
+        ...prev,
+        password: "Login failed. Dobara try karo.",
+      }));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import {
   BookOpen,
   LayoutDashboard,
@@ -33,6 +34,16 @@ export default function DashboardLayout({
   const isActive = (href: string, exact: boolean) => {
     if (exact) return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
+  const handleLogout = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/");
+    } catch {
+      router.push("/");
+    }
   };
 
   return (
@@ -84,7 +95,7 @@ export default function DashboardLayout({
         <div className="border-t border-white/10 px-4 py-4">
           <button
             type="button"
-            onClick={() => router.push("/")}
+            onClick={handleLogout}
             className="flex cursor-pointer items-center gap-3 text-sm text-red-400 transition-colors hover:text-red-300"
           >
             <LogOut className="h-4 w-4 shrink-0" />

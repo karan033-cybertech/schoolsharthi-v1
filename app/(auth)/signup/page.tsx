@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import type { ClassName } from "@/types";
 
 const CLASS_OPTIONS: { value: ClassName | ""; label: string }[] = [
@@ -31,6 +32,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState({
     fullName: "",
+    className: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -41,6 +43,7 @@ export default function SignupPage() {
   const validate = () => {
     const newErrors = {
       fullName: "",
+      className: "",
       email: "",
       password: "",
       confirmPassword: "",
@@ -48,6 +51,9 @@ export default function SignupPage() {
 
     if (fullName.trim().length < 2) {
       newErrors.fullName = "Full name kam se kam 2 characters ka hona chahiye";
+    }
+    if (!selectedClass) {
+      newErrors.className = "Class select karna zaroori hai";
     }
     if (!email.trim()) {
       newErrors.email = "Email zaroori hai";
@@ -65,12 +71,54 @@ export default function SignupPage() {
     return Object.values(newErrors).every((error) => !error);
   };
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (!validate()) return;
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            full_name: fullName.trim(),
+            class_name: selectedClass,
+          },
+        },
+      });
+
+      if (error) {
+        setErrors((prev) => ({ ...prev, email: error.message }));
+        return;
+      }
+
+      if (data.user?.id && selectedClass) {
+        const { error: profileError } = await supabase.from("profiles").insert({
+          id: data.user.id,
+          full_name: fullName.trim(),
+          class_name: selectedClass,
+          state: "Rajasthan",
+        });
+
+        if (profileError) {
+          setErrors((prev) => ({
+            ...prev,
+            email: profileError.message,
+          }));
+          return;
+        }
+      }
+
       router.push("/dashboard");
-    }, 1500);
+    } catch {
+      setErrors((prev) => ({
+        ...prev,
+        email: "Signup failed. Dobara try karo.",
+      }));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -147,6 +195,9 @@ export default function SignupPage() {
                   </option>
                 ))}
               </select>
+              {errors.className && (
+                <p className="mt-1 text-xs text-red-500">{errors.className}</p>
+              )}
             </div>
             <div>
               <label

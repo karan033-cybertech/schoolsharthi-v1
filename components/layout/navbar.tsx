@@ -3,8 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, X } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -23,8 +25,42 @@ const moreLinks = [
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const moreRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const router = useRouter();
+
+  const avatarLetter =
+    user?.user_metadata?.full_name?.[0]?.toUpperCase() ??
+    user?.email?.[0]?.toUpperCase() ??
+    "A";
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      setUser(null);
+      router.push("/");
+    } catch {
+      router.push("/");
+    }
+  };
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
@@ -117,19 +153,44 @@ export default function Navbar() {
           >
             <Search className="h-5 w-5" />
           </button>
-          <Link
-            href="/login"
-            className="rounded-full border px-5 py-2 text-sm font-medium text-[#111111] transition-colors hover:bg-gray-50"
-            style={{ borderColor: "#E5E7EB" }}
-          >
-            Login
-          </Link>
-          <Link
-            href="/signup"
-            className="rounded-full bg-[#111111] px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          >
-            Sign Up
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium text-[#111111] transition-colors hover:bg-gray-50"
+                style={{ borderColor: "#E5E7EB" }}
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-black">
+                  {avatarLetter}
+                </span>
+                Dashboard
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-full border px-5 py-2 text-sm font-medium text-[#111111] transition-colors hover:bg-gray-50"
+                style={{ borderColor: "#E5E7EB" }}
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="rounded-full border px-5 py-2 text-sm font-medium text-[#111111] transition-colors hover:bg-gray-50"
+                style={{ borderColor: "#E5E7EB" }}
+              >
+                Login
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-full bg-[#111111] px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
 
         <button
@@ -173,21 +234,50 @@ export default function Navbar() {
             className="mt-4 flex flex-col gap-3 border-t pt-4"
             style={{ borderColor: "#E5E7EB" }}
           >
-            <Link
-              href="/login"
-              className="rounded-full border px-5 py-2 text-sm font-medium text-[#111111]"
-              style={{ borderColor: "#E5E7EB" }}
-              onClick={() => setMobileOpen(false)}
-            >
-              Login
-            </Link>
-            <Link
-              href="/signup"
-              className="rounded-full bg-[#111111] px-5 py-2 text-sm font-medium text-white"
-              onClick={() => setMobileOpen(false)}
-            >
-              Sign Up
-            </Link>
+            {user ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className="flex items-center justify-center gap-2 rounded-full border px-5 py-2 text-sm font-medium text-[#111111]"
+                  style={{ borderColor: "#E5E7EB" }}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-black">
+                    {avatarLetter}
+                  </span>
+                  Dashboard
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    handleLogout();
+                  }}
+                  className="rounded-full border px-5 py-2 text-sm font-medium text-[#111111]"
+                  style={{ borderColor: "#E5E7EB" }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-full border px-5 py-2 text-sm font-medium text-[#111111]"
+                  style={{ borderColor: "#E5E7EB" }}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  className="rounded-full bg-[#111111] px-5 py-2 text-sm font-medium text-white"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

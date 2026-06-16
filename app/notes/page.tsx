@@ -1,12 +1,9 @@
-"use client";
-
-import { useMemo, useState } from "react";
 import Navbar from "@/components/layout/navbar";
-import NotesFilter, { type SubjectFilter } from "@/components/notes/notes-filter";
 import NotesGrid from "@/components/notes/notes-grid";
-import type { ClassName, Note } from "@/types";
+import { createClient } from "@/lib/supabase/server";
+import type { Note } from "@/types";
 
-const SAMPLE_NOTES: Note[] = [
+const FALLBACK_NOTES: Note[] = [
   {
     id: "1",
     title: "Life Processes",
@@ -66,24 +63,23 @@ const HEADER_STATS = [
   { value: "Free", label: "PDF Downloads" },
 ];
 
-export default function NotesPage() {
-  const [selectedClass, setSelectedClass] = useState<ClassName | "all">("all");
-  const [selectedSubject, setSelectedSubject] = useState<SubjectFilter>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+export default async function NotesPage() {
+  let notes: Note[] = FALLBACK_NOTES;
 
-  const filteredNotes = useMemo(() => {
-    return SAMPLE_NOTES.filter((note) => {
-      const classMatch =
-        selectedClass === "all" || note.class_name === selectedClass;
-      const subjectMatch =
-        selectedSubject === "all" ||
-        note.subject.toLowerCase() === selectedSubject.toLowerCase();
-      const searchMatch = note.title
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      return classMatch && subjectMatch && searchMatch;
-    });
-  }, [selectedClass, selectedSubject, searchQuery]);
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("notes")
+      .select("*")
+      .eq("is_published", true)
+      .order("created_at", { ascending: false });
+
+    if (data && data.length > 0) {
+      notes = data as Note[];
+    }
+  } catch {
+    // Use fallback notes if Supabase fetch fails
+  }
 
   return (
     <>
@@ -115,16 +111,7 @@ export default function NotesPage() {
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-          <NotesFilter
-            selectedClass={selectedClass}
-            selectedSubject={selectedSubject}
-            onClassChange={setSelectedClass}
-            onSubjectChange={setSelectedSubject}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-          />
-
-          <NotesGrid notes={filteredNotes} />
+          <NotesGrid notes={notes} />
         </main>
       </div>
     </>

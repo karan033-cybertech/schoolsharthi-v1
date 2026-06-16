@@ -15,7 +15,8 @@ import {
   Trophy,
 } from "lucide-react";
 import Navbar from "@/components/layout/navbar";
-import type { OpportunityType } from "@/types";
+import { createClient } from "@/lib/supabase/client";
+import type { Opportunity, OpportunityType } from "@/types";
 
 type OpportunityItem = {
   id: string;
@@ -137,11 +138,41 @@ const HEADER_STATS = [
   { value: "100%", label: "Free" },
 ];
 
+const TYPE_ICON_MAP: Record<OpportunityType, OpportunityItem["icon"]> = {
+  scholarship: "award",
+  olympiad: "calculator",
+  competition: "trophy",
+  government: "landmark",
+};
+
+const TYPE_COLOR_MAP: Record<OpportunityType, OpportunityItem["color"]> = {
+  scholarship: "green",
+  olympiad: "purple",
+  competition: "yellow",
+  government: "red",
+};
+
+function mapDbOpportunity(opp: Opportunity): OpportunityItem {
+  return {
+    id: opp.id,
+    title: opp.title,
+    type: opp.type,
+    description: opp.description,
+    class_range: opp.class_range ?? "",
+    deadline: opp.deadline,
+    icon: TYPE_ICON_MAP[opp.type],
+    color: TYPE_COLOR_MAP[opp.type],
+  };
+}
+
 function OpportunitiesContent() {
   const searchParams = useSearchParams();
   const typeParam = searchParams.get("type");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [opportunities, setOpportunities] =
+    useState<OpportunityItem[]>(OPPORTUNITIES);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (typeParam && FILTER_PILLS.some((pill) => pill.value === typeParam)) {
@@ -149,15 +180,40 @@ function OpportunitiesContent() {
     }
   }, [typeParam]);
 
+  useEffect(() => {
+    async function fetchOpportunities() {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("opportunities")
+          .select("*")
+          .eq("is_published", true)
+          .order("created_at", { ascending: false });
+
+        if (data && data.length > 0) {
+          setOpportunities(
+            (data as Opportunity[]).map(mapDbOpportunity)
+          );
+        }
+      } catch {
+        // Keep hardcoded fallback on error
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchOpportunities();
+  }, []);
+
   const filteredOpportunities = useMemo(() => {
-    return OPPORTUNITIES.filter((opp) => {
+    return opportunities.filter((opp) => {
       const typeMatch = selectedType === "all" || opp.type === selectedType;
       const searchMatch =
         searchQuery.trim() === "" ||
         opp.title.toLowerCase().includes(searchQuery.toLowerCase());
       return typeMatch && searchMatch;
     });
-  }, [selectedType, searchQuery]);
+  }, [opportunities, selectedType, searchQuery]);
 
   return (
     <div className="min-h-screen bg-[#FAFAF8]">
@@ -219,7 +275,16 @@ function OpportunitiesContent() {
       </div>
 
       <div className="mx-4 pb-12 md:mx-8">
-        {filteredOpportunities.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-24 animate-pulse rounded-2xl bg-gray-100"
+              />
+            ))}
+          </div>
+        ) : filteredOpportunities.length === 0 ? (
           <p className="py-12 text-center text-gray-500">
             Koi opportunity nahi mili. Filter ya search change karke dekho.
           </p>

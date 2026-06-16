@@ -1,7 +1,9 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
-import type { Note } from "@/types";
+import NotesFilter, { type SubjectFilter } from "@/components/notes/notes-filter";
+import type { ClassName, Note } from "@/types";
 
 type NotesGridProps = {
   notes: Note[];
@@ -33,61 +35,92 @@ function handleDownload(pdfUrl: string | null | undefined) {
 }
 
 export default function NotesGrid({ notes }: NotesGridProps) {
-  if (notes.length === 0) {
-    return (
-      <p className="py-12 text-center text-gray-500">
-        Koi notes nahi mile. Filter change karke dekho.
-      </p>
-    );
-  }
+  const [selectedClass, setSelectedClass] = useState<ClassName | "all">("all");
+  const [selectedSubject, setSelectedSubject] = useState<SubjectFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredNotes = useMemo(() => {
+    return notes.filter((note) => {
+      const classMatch =
+        selectedClass === "all" || note.class_name === selectedClass;
+      const subjectMatch =
+        selectedSubject === "all" ||
+        note.subject.toLowerCase() === selectedSubject.toLowerCase();
+      const searchMatch = note.title
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+      return classMatch && subjectMatch && searchMatch;
+    });
+  }, [notes, selectedClass, selectedSubject, searchQuery]);
 
   return (
-    <div className="grid grid-cols-2 gap-5 md:grid-cols-3">
-      {notes.map((note) => {
-        const style = getSubjectStyle(note.subject);
-        const description =
-          note.content.trim() ||
-          `${note.subject} notes for Class ${note.class_name}`;
+    <>
+      <NotesFilter
+        selectedClass={selectedClass}
+        selectedSubject={selectedSubject}
+        onClassChange={setSelectedClass}
+        onSubjectChange={setSelectedSubject}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+      />
 
-        return (
-          <article
-            key={note.id}
-            className="rounded-2xl border border-[#E5E7EB] bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-medium ${style.bg} ${style.text}`}
+      {filteredNotes.length === 0 ? (
+        <p className="py-12 text-center text-gray-500">
+          Koi notes nahi mile. Filter change karke dekho.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-5 md:grid-cols-3">
+          {filteredNotes.map((note) => {
+            const style = getSubjectStyle(note.subject);
+            const description =
+              note.content.trim() ||
+              `${note.subject} notes for Class ${note.class_name}`;
+
+            return (
+              <article
+                key={note.id}
+                className="rounded-2xl border border-[#E5E7EB] bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
               >
-                {note.subject}
-              </span>
-              {note.pdf_url && (
-                <span className="shrink-0 rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
-                  PDF
-                </span>
-              )}
-            </div>
+                <div className="flex items-start justify-between gap-2">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${style.bg} ${style.text}`}
+                  >
+                    {note.subject}
+                  </span>
+                  {note.pdf_url && (
+                    <span className="shrink-0 rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
+                      PDF
+                    </span>
+                  )}
+                </div>
 
-            <p className="mt-1 text-xs text-gray-400">Class {note.class_name}</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Class {note.class_name}
+                </p>
 
-            <h3 className="mt-3 text-base font-bold text-[#111111]">{note.title}</h3>
+                <h3 className="mt-3 text-base font-bold text-[#111111]">
+                  {note.title}
+                </h3>
 
-            <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-gray-500">
-              {description}
-            </p>
+                <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-gray-500">
+                  {description}
+                </p>
 
-            <div className="mt-4 border-t border-[#F3F4F6] pt-4">
-              <button
-                type="button"
-                onClick={() => handleDownload(note.pdf_url)}
-                className="flex cursor-pointer items-center gap-1.5 text-sm font-medium text-[#D4AF37] hover:underline"
-              >
-                <FileText className="h-4 w-4" />
-                Download PDF
-              </button>
-            </div>
-          </article>
-        );
-      })}
-    </div>
+                <div className="mt-4 border-t border-[#F3F4F6] pt-4">
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(note.pdf_url)}
+                    className="flex cursor-pointer items-center gap-1.5 text-sm font-medium text-[#D4AF37] hover:underline"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Download PDF
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }
