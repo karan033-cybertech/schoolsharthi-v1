@@ -27,6 +27,7 @@ export default function SignupPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fullName, setFullName] = useState("");
   const [selectedClass, setSelectedClass] = useState<ClassName | "">("");
+  const [school, setSchool] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -86,6 +87,7 @@ export default function SignupPage() {
           data: {
             full_name: fullName.trim(),
             class_name: selectedClass,
+            school: school.trim() || null,
           },
         },
       });
@@ -226,6 +228,8 @@ export default function SignupPage() {
               <input
                 id="school"
                 type="text"
+                value={school}
+                onChange={(e) => setSchool(e.target.value)}
                 placeholder="Enter your school (optional)"
                 className={inputClassName}
               />

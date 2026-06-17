@@ -80,8 +80,18 @@ export default function AdminNotesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Ye note delete karna chahte ho?")) return;
-    await supabase.from("notes").delete().eq("id", id);
-    fetchNotes();
+    try {
+      const { error } = await supabase.from("notes").delete().eq("id", id);
+      if (error) {
+        console.error("Failed to delete note:", error.message);
+        alert("Delete karne mein error aayi: " + error.message);
+        return;
+      }
+      fetchNotes();
+    } catch (err) {
+      console.error("Error in handleDelete:", err);
+      alert("Kuch gadbad ho gayi. Thodi der baad try karo.");
+    }
   };
 
   const handleEdit = (note: Note) => {
@@ -98,19 +108,29 @@ export default function AdminNotesPage() {
 
   const handleUpdateNote = async () => {
     if (!editId) return;
-    await supabase
-      .from("notes")
-      .update({
-        title: form.title,
-        subject: form.subject,
-        class_name: form.class_name,
-        content: form.content,
-        pdf_url: form.pdf_url || null,
-      })
-      .eq("id", editId);
-    resetForm();
-    fetchNotes();
-    alert("Note update ho gaya!");
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .update({
+          title: form.title,
+          subject: form.subject,
+          class_name: form.class_name,
+          content: form.content,
+          pdf_url: form.pdf_url || null,
+        })
+        .eq("id", editId);
+      if (error) {
+        console.error("Failed to update note:", error.message);
+        alert("Update karne mein error aayi: " + error.message);
+        return;
+      }
+      resetForm();
+      fetchNotes();
+      alert("Note update ho gaya!");
+    } catch (err) {
+      console.error("Error in handleUpdateNote:", err);
+      alert("Kuch gadbad ho gayi. Thodi der baad try karo.");
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

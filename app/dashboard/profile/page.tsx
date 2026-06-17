@@ -21,40 +21,74 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
+    let isMounted = true;
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      setProfile({
-        full_name: data?.full_name || user.user_metadata?.full_name || '',
-        class_name: (data?.class_name || user.user_metadata?.class_name || '') as ClassName | "",
-        school: data?.school || '',
-        city: data?.city || '',
-        bio: data?.bio || '',
-      })
-      setIsLoading(false)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          if (isMounted) router.push('/login');
+          return;
+        }
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        if (error && error.code !== 'PGRST116') {
+          console.error("Error loading profile:", error.message);
+        }
+        if (isMounted) {
+          setProfile({
+            full_name: data?.full_name || user.user_metadata?.full_name || '',
+            class_name: (data?.class_name || user.user_metadata?.class_name || '') as ClassName | "",
+            school: data?.school || '',
+            city: data?.city || '',
+            bio: data?.bio || '',
+          });
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+        if (isMounted) {
+          alert("Profile load karne mein error aayi.");
+          setIsLoading(false);
+        }
+      }
     }
     load()
+    return () => {
+      isMounted = false;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSave = async () => {
     if (!profile) return
     setIsSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    await supabase.from('profiles').upsert({
-      id: user.id,
-      full_name: profile.full_name,
-      class_name: profile.class_name || null,
-      school: profile.school,
-      city: profile.city,
-      bio: profile.bio,
-      updated_at: new Date().toISOString(),
-    })
-    setIsSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert("Notes save karne ke liye pehle login karo!");
+        return;
+      }
+      const { error } = await supabase.from('profiles').upsert({
+        id: user.id,
+        full_name: profile.full_name,
+        class_name: profile.class_name || null,
+        school: profile.school,
+        city: profile.city,
+        bio: profile.bio,
+        updated_at: new Date().toISOString(),
+      })
+      if (error) {
+        console.error("Error saving profile:", error.message);
+        alert("Profile save karne mein error aayi: " + error.message);
+        return;
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      alert("Kuch gadbad ho gayi. Thodi der baad try karo.");
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   if (isLoading) return <div className="min-h-screen bg-[#FAFAF8] flex items-center justify-center"><div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin"/></div>

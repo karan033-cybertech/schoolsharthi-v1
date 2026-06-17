@@ -23,11 +23,17 @@ export type Career = {
   slug: string;
   name: string;
   overview: string;
+  tagline?: string;
   skills: string[];
   roadmap: string[];
   exams: string[];
   future_scope: string;
+  duration?: string;
+  avg_salary?: string;
+  field?: string;
+  growth?: string;
   image_url?: string;
+  is_published?: boolean;
 };
 
 export type Opportunity = {

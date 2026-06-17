@@ -87,8 +87,18 @@ export default function AdminOpportunitiesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Ye opportunity delete karna chahte ho?")) return;
-    await supabase.from("opportunities").delete().eq("id", id);
-    fetchOpportunities();
+    try {
+      const { error } = await supabase.from("opportunities").delete().eq("id", id);
+      if (error) {
+        console.error("Failed to delete opportunity:", error.message);
+        alert("Delete karne mein error aayi: " + error.message);
+        return;
+      }
+      fetchOpportunities();
+    } catch (err) {
+      console.error("Error in handleDelete:", err);
+      alert("Kuch gadbad ho gayi. Thodi der baad try karo.");
+    }
   };
 
   const handleEdit = (opp: Opportunity) => {
@@ -106,20 +116,30 @@ export default function AdminOpportunitiesPage() {
 
   const handleUpdate = async () => {
     if (!editId) return;
-    await supabase
-      .from("opportunities")
-      .update({
-        title: form.title,
-        type: form.type,
-        description: form.description,
-        class_range: form.class_range,
-        deadline: form.deadline,
-        apply_url: form.apply_url || null,
-      })
-      .eq("id", editId);
-    resetForm();
-    fetchOpportunities();
-    alert("Opportunity update ho gayi!");
+    try {
+      const { error } = await supabase
+        .from("opportunities")
+        .update({
+          title: form.title,
+          type: form.type,
+          description: form.description,
+          class_range: form.class_range,
+          deadline: form.deadline,
+          apply_url: form.apply_url || null,
+        })
+        .eq("id", editId);
+      if (error) {
+        console.error("Failed to update opportunity:", error.message);
+        alert("Update karne mein error aayi: " + error.message);
+        return;
+      }
+      resetForm();
+      fetchOpportunities();
+      alert("Opportunity update ho gayi!");
+    } catch (err) {
+      console.error("Error in handleUpdate:", err);
+      alert("Kuch gadbad ho gayi. Thodi der baad try karo.");
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
