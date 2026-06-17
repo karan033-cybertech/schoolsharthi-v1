@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import type { OpportunityType } from "@/types";
+import { useCallback, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { Opportunity, OpportunityType } from "@/types";
 
-type AdminOpportunity = {
-  id: string;
+type OpportunityForm = {
   title: string;
   type: OpportunityType;
   description: string;
@@ -13,68 +13,14 @@ type AdminOpportunity = {
   apply_url: string;
 };
 
-const OPPORTUNITIES: AdminOpportunity[] = [
-  {
-    id: "1",
-    title: "INSPIRE Award – MANAK 2024",
-    type: "competition",
-    description:
-      "India's top science project competition for school students. Show your innovation and get recognized at national level.",
-    class_range: "Class 6 – 12",
-    deadline: "30 June 2024",
-    apply_url: "https://inspireawards-dst.gov.in",
-  },
-  {
-    id: "2",
-    title: "National Science Olympiad (NSO)",
-    type: "olympiad",
-    description:
-      "Science olympiad for students from Class 1 to 12. Test your science knowledge and compete nationally.",
-    class_range: "Class 1 – 12",
-    deadline: "31 July 2024",
-    apply_url: "https://www.sofworld.org",
-  },
-  {
-    id: "3",
-    title: "Merit-cum-Means Scholarship",
-    type: "scholarship",
-    description:
-      "Scholarship for meritorious students from economically weaker sections. Up to ₹12,000 per year.",
-    class_range: "Class 11 – 12",
-    deadline: "20 Aug 2024",
-    apply_url: "https://scholarships.gov.in",
-  },
-  {
-    id: "4",
-    title: "International Maths Olympiad (IMO)",
-    type: "olympiad",
-    description:
-      "World's most prestigious mathematics competition for school students. Represent India internationally.",
-    class_range: "Class 1 – 12",
-    deadline: "15 Sep 2024",
-    apply_url: "https://www.imo-official.org",
-  },
-  {
-    id: "5",
-    title: "PM Scholarship Scheme",
-    type: "scholarship",
-    description:
-      "Government scholarship for students whose parents are ex-servicemen. ₹2500/month for boys, ₹3000/month for girls.",
-    class_range: "Class 11 – 12",
-    deadline: "31 Oct 2024",
-    apply_url: "https://ksb.gov.in",
-  },
-  {
-    id: "6",
-    title: "Pradhan Mantri Yuva Yojana",
-    type: "government",
-    description:
-      "Government program for young entrepreneurs and innovators. Get mentorship, training and funding support.",
-    class_range: "Class 9 – 12",
-    deadline: "Open",
-    apply_url: "https://pmyuva.org",
-  },
-];
+const EMPTY_FORM: OpportunityForm = {
+  title: "",
+  type: "scholarship",
+  description: "",
+  class_range: "",
+  deadline: "",
+  apply_url: "",
+};
 
 const TYPE_BADGE_STYLES: Record<OpportunityType, string> = {
   scholarship: "bg-green-50 text-green-600 border border-green-200",
@@ -94,7 +40,96 @@ const inputClassName =
   "w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none transition-all focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]";
 
 export default function AdminOpportunitiesPage() {
+  const supabase = createClient();
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<OpportunityForm>(EMPTY_FORM);
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const fetchOpportunities = useCallback(async () => {
+    const { data } = await supabase
+      .from("opportunities")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) setOpportunities(data as Opportunity[]);
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchOpportunities();
+  }, [fetchOpportunities]);
+
+  const resetForm = () => {
+    setForm(EMPTY_FORM);
+    setEditId(null);
+    setShowForm(false);
+  };
+
+  const handleAdd = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("opportunities").insert({
+      title: form.title,
+      type: form.type,
+      description: form.description,
+      class_range: form.class_range,
+      deadline: form.deadline,
+      apply_url: form.apply_url || null,
+      is_published: true,
+      created_by: user?.id,
+    });
+    if (!error) {
+      resetForm();
+      fetchOpportunities();
+      alert("Opportunity add ho gayi!");
+    } else {
+      alert("Error: " + error.message);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Ye opportunity delete karna chahte ho?")) return;
+    await supabase.from("opportunities").delete().eq("id", id);
+    fetchOpportunities();
+  };
+
+  const handleEdit = (opp: Opportunity) => {
+    setForm({
+      title: opp.title,
+      type: opp.type,
+      description: opp.description,
+      class_range: opp.class_range || "",
+      deadline: opp.deadline,
+      apply_url: opp.apply_url || "",
+    });
+    setEditId(opp.id);
+    setShowForm(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editId) return;
+    await supabase
+      .from("opportunities")
+      .update({
+        title: form.title,
+        type: form.type,
+        description: form.description,
+        class_range: form.class_range,
+        deadline: form.deadline,
+        apply_url: form.apply_url || null,
+      })
+      .eq("id", editId);
+    resetForm();
+    fetchOpportunities();
+    alert("Opportunity update ho gayi!");
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editId) {
+      handleUpdate();
+    } else {
+      handleAdd();
+    }
+  };
 
   return (
     <div>
@@ -107,7 +142,11 @@ export default function AdminOpportunitiesPage() {
         </h1>
         <button
           type="button"
-          onClick={() => setShowForm((prev) => !prev)}
+          onClick={() => {
+            setEditId(null);
+            setForm(EMPTY_FORM);
+            setShowForm((prev) => !prev);
+          }}
           className="rounded-xl bg-[#D4AF37] px-5 py-2.5 text-sm font-semibold text-[#111111] transition-all hover:bg-yellow-400"
         >
           + Add Opportunity
@@ -118,20 +157,33 @@ export default function AdminOpportunitiesPage() {
         {showForm && (
           <form
             className="mb-6 rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={handleSubmit}
           >
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Title
                 </label>
-                <input type="text" placeholder="Opportunity title" className={inputClassName} />
+                <input
+                  type="text"
+                  placeholder="Opportunity title"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  className={inputClassName}
+                  required
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Type
                 </label>
-                <select className={inputClassName} defaultValue="scholarship">
+                <select
+                  value={form.type}
+                  onChange={(e) =>
+                    setForm({ ...form, type: e.target.value as OpportunityType })
+                  }
+                  className={inputClassName}
+                >
                   <option value="scholarship">Scholarship</option>
                   <option value="olympiad">Olympiad</option>
                   <option value="competition">Competition</option>
@@ -145,6 +197,8 @@ export default function AdminOpportunitiesPage() {
                 <input
                   type="text"
                   placeholder="e.g. Class 6-12"
+                  value={form.class_range}
+                  onChange={(e) => setForm({ ...form, class_range: e.target.value })}
                   className={inputClassName}
                 />
               </div>
@@ -155,6 +209,8 @@ export default function AdminOpportunitiesPage() {
                 <textarea
                   rows={4}
                   placeholder="Opportunity description..."
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                   className={`${inputClassName} resize-none`}
                 />
               </div>
@@ -162,7 +218,12 @@ export default function AdminOpportunitiesPage() {
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Deadline
                 </label>
-                <input type="date" className={inputClassName} />
+                <input
+                  type="date"
+                  value={form.deadline}
+                  onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                  className={inputClassName}
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -171,6 +232,8 @@ export default function AdminOpportunitiesPage() {
                 <input
                   type="text"
                   placeholder="https://..."
+                  value={form.apply_url}
+                  onChange={(e) => setForm({ ...form, apply_url: e.target.value })}
                   className={inputClassName}
                 />
               </div>
@@ -180,11 +243,11 @@ export default function AdminOpportunitiesPage() {
                 type="submit"
                 className="rounded-xl bg-[#111111] px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
               >
-                Save
+                {editId ? "Update" : "Save"}
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={resetForm}
                 className="rounded-xl border border-[#E5E7EB] px-5 py-2.5 text-sm font-medium text-[#111111] hover:bg-gray-50"
               >
                 Cancel
@@ -205,38 +268,48 @@ export default function AdminOpportunitiesPage() {
               </tr>
             </thead>
             <tbody>
-              {OPPORTUNITIES.map((opp) => (
-                <tr
-                  key={opp.id}
-                  className="border-b border-[#F3F4F6] text-sm last:border-b-0"
-                >
-                  <td className="px-6 py-4 font-medium text-[#111111]">{opp.title}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`rounded-full px-3 py-0.5 text-xs font-medium ${TYPE_BADGE_STYLES[opp.type]}`}
-                    >
-                      {TYPE_LABELS[opp.type]}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{opp.class_range}</td>
-                  <td className="px-6 py-4 text-gray-600">{opp.deadline}</td>
-                  <td className="px-6 py-4">
-                    <button
-                      type="button"
-                      className="text-xs text-blue-500 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <span className="mx-2 text-gray-300">|</span>
-                    <button
-                      type="button"
-                      className="text-xs text-red-500 hover:underline"
-                    >
-                      Delete
-                    </button>
+              {opportunities.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-400">
+                    Koi opportunities nahi mili. Pehli opportunity add karo!
                   </td>
                 </tr>
-              ))}
+              ) : (
+                opportunities.map((opp) => (
+                  <tr
+                    key={opp.id}
+                    className="border-b border-[#F3F4F6] text-sm last:border-b-0"
+                  >
+                    <td className="px-6 py-4 font-medium text-[#111111]">{opp.title}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full px-3 py-0.5 text-xs font-medium ${TYPE_BADGE_STYLES[opp.type]}`}
+                      >
+                        {TYPE_LABELS[opp.type]}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{opp.class_range}</td>
+                    <td className="px-6 py-4 text-gray-600">{opp.deadline}</td>
+                    <td className="px-6 py-4">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(opp)}
+                        className="text-xs text-blue-500 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <span className="mx-2 text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(opp.id)}
+                        className="text-xs text-red-500 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

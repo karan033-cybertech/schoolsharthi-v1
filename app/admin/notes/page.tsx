@@ -1,61 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import type { ClassName, Note } from "@/types";
 
-const SAMPLE_NOTES: Note[] = [
-  {
-    id: "1",
-    title: "Life Processes",
-    subject: "Science",
-    class_name: "10",
-    content: "",
-    pdf_url: "/notes/life-processes.pdf",
-    created_at: "2026-01-01",
-  },
-  {
-    id: "2",
-    title: "Trigonometry",
-    subject: "Maths",
-    class_name: "11",
-    content: "",
-    created_at: "2026-01-02",
-  },
-  {
-    id: "3",
-    title: "The Living World",
-    subject: "Biology",
-    class_name: "11",
-    content: "",
-    pdf_url: "/notes/living-world.pdf",
-    created_at: "2026-01-03",
-  },
-  {
-    id: "4",
-    title: "Motion in a Plane",
-    subject: "Physics",
-    class_name: "11",
-    content: "",
-    created_at: "2026-01-04",
-  },
-  {
-    id: "5",
-    title: "Our Environment",
-    subject: "Science",
-    class_name: "10",
-    content: "",
-    created_at: "2026-01-05",
-  },
-  {
-    id: "6",
-    title: "Magnetic Effects of Light",
-    subject: "Science",
-    class_name: "10",
-    content: "",
-    pdf_url: "/notes/magnetic-effects.pdf",
-    created_at: "2026-01-06",
-  },
-];
+type NoteForm = {
+  title: string;
+  subject: string;
+  class_name: ClassName;
+  content: string;
+  pdf_url: string;
+};
+
+const EMPTY_FORM: NoteForm = {
+  title: "",
+  subject: "Science",
+  class_name: "10",
+  content: "",
+  pdf_url: "",
+};
 
 const SUBJECT_STYLES: Record<string, string> = {
   Science: "bg-blue-50 text-blue-600",
@@ -71,7 +34,93 @@ const inputClassName =
   "w-full rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm outline-none transition-all focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]";
 
 export default function AdminNotesPage() {
+  const supabase = createClient();
+  const [notes, setNotes] = useState<Note[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<NoteForm>(EMPTY_FORM);
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const fetchNotes = useCallback(async () => {
+    const { data } = await supabase
+      .from("notes")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) setNotes(data as Note[]);
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchNotes();
+  }, [fetchNotes]);
+
+  const resetForm = () => {
+    setForm(EMPTY_FORM);
+    setEditId(null);
+    setShowForm(false);
+  };
+
+  const handleAddNote = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from("notes").insert({
+      title: form.title,
+      subject: form.subject,
+      class_name: form.class_name,
+      content: form.content,
+      pdf_url: form.pdf_url || null,
+      is_published: true,
+      created_by: user?.id,
+    });
+    if (!error) {
+      resetForm();
+      fetchNotes();
+      alert("Note add ho gaya!");
+    } else {
+      alert("Error: " + error.message);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Ye note delete karna chahte ho?")) return;
+    await supabase.from("notes").delete().eq("id", id);
+    fetchNotes();
+  };
+
+  const handleEdit = (note: Note) => {
+    setForm({
+      title: note.title,
+      subject: note.subject,
+      class_name: note.class_name,
+      content: note.content,
+      pdf_url: note.pdf_url || "",
+    });
+    setEditId(note.id);
+    setShowForm(true);
+  };
+
+  const handleUpdateNote = async () => {
+    if (!editId) return;
+    await supabase
+      .from("notes")
+      .update({
+        title: form.title,
+        subject: form.subject,
+        class_name: form.class_name,
+        content: form.content,
+        pdf_url: form.pdf_url || null,
+      })
+      .eq("id", editId);
+    resetForm();
+    fetchNotes();
+    alert("Note update ho gaya!");
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editId) {
+      handleUpdateNote();
+    } else {
+      handleAddNote();
+    }
+  };
 
   return (
     <div>
@@ -84,7 +133,11 @@ export default function AdminNotesPage() {
         </h1>
         <button
           type="button"
-          onClick={() => setShowForm((prev) => !prev)}
+          onClick={() => {
+            setEditId(null);
+            setForm(EMPTY_FORM);
+            setShowForm((prev) => !prev);
+          }}
           className="rounded-xl bg-[#D4AF37] px-5 py-2.5 text-sm font-semibold text-[#111111] transition-all hover:bg-yellow-400"
         >
           + Add Note
@@ -95,20 +148,31 @@ export default function AdminNotesPage() {
         {showForm && (
           <form
             className="mb-6 rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={handleSubmit}
           >
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Title
                 </label>
-                <input type="text" placeholder="Note title" className={inputClassName} />
+                <input
+                  type="text"
+                  placeholder="Note title"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  className={inputClassName}
+                  required
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Subject
                 </label>
-                <select className={inputClassName} defaultValue="Science">
+                <select
+                  value={form.subject}
+                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                  className={inputClassName}
+                >
                   {["Science", "Maths", "Physics", "Chemistry", "Biology", "English", "Hindi"].map(
                     (subject) => (
                       <option key={subject} value={subject}>
@@ -122,7 +186,13 @@ export default function AdminNotesPage() {
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Class
                 </label>
-                <select className={inputClassName} defaultValue="10">
+                <select
+                  value={form.class_name}
+                  onChange={(e) =>
+                    setForm({ ...form, class_name: e.target.value as ClassName })
+                  }
+                  className={inputClassName}
+                >
                   {(["6", "7", "8", "9", "10", "11", "12"] as ClassName[]).map((cls) => (
                     <option key={cls} value={cls}>
                       Class {cls}
@@ -137,6 +207,8 @@ export default function AdminNotesPage() {
                 <textarea
                   rows={4}
                   placeholder="Note content..."
+                  value={form.content}
+                  onChange={(e) => setForm({ ...form, content: e.target.value })}
                   className={`${inputClassName} resize-none`}
                 />
               </div>
@@ -147,6 +219,8 @@ export default function AdminNotesPage() {
                 <input
                   type="text"
                   placeholder="/notes/example.pdf"
+                  value={form.pdf_url}
+                  onChange={(e) => setForm({ ...form, pdf_url: e.target.value })}
                   className={inputClassName}
                 />
               </div>
@@ -156,11 +230,11 @@ export default function AdminNotesPage() {
                 type="submit"
                 className="rounded-xl bg-[#111111] px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
               >
-                Save Note
+                {editId ? "Update Note" : "Save Note"}
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={resetForm}
                 className="rounded-xl border border-[#E5E7EB] px-5 py-2.5 text-sm font-medium text-[#111111] hover:bg-gray-50"
               >
                 Cancel
@@ -181,50 +255,60 @@ export default function AdminNotesPage() {
               </tr>
             </thead>
             <tbody>
-              {SAMPLE_NOTES.map((note) => (
-                <tr
-                  key={note.id}
-                  className="border-b border-[#F3F4F6] text-sm last:border-b-0"
-                >
-                  <td className="px-6 py-4 font-medium text-[#111111]">{note.title}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        SUBJECT_STYLES[note.subject] ?? "bg-gray-50 text-gray-600"
-                      }`}
-                    >
-                      {note.subject}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600">
-                      Class {note.class_name}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    {note.pdf_url ? (
-                      <span className="text-green-500">✓</span>
-                    ) : (
-                      <span className="text-gray-300">✗</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      type="button"
-                      className="text-xs text-blue-500 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <span className="mx-2 text-gray-300">|</span>
-                    <button
-                      type="button"
-                      className="text-xs text-red-500 hover:underline"
-                    >
-                      Delete
-                    </button>
+              {notes.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-400">
+                    Koi notes nahi mile. Pehla note add karo!
                   </td>
                 </tr>
-              ))}
+              ) : (
+                notes.map((note) => (
+                  <tr
+                    key={note.id}
+                    className="border-b border-[#F3F4F6] text-sm last:border-b-0"
+                  >
+                    <td className="px-6 py-4 font-medium text-[#111111]">{note.title}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          SUBJECT_STYLES[note.subject] ?? "bg-gray-50 text-gray-600"
+                        }`}
+                      >
+                        {note.subject}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600">
+                        Class {note.class_name}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {note.pdf_url ? (
+                        <span className="text-green-500">✓</span>
+                      ) : (
+                        <span className="text-gray-300">✗</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(note)}
+                        className="text-xs text-blue-500 hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <span className="mx-2 text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(note.id)}
+                        className="text-xs text-red-500 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

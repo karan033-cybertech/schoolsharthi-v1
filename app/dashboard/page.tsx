@@ -16,7 +16,11 @@ import {
   Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile } from "@/types";
+type DashboardProfile = {
+  full_name: string;
+  class_name: string;
+  school: string;
+};
 
 const RECENT_ACTIVITY = [
   {
@@ -59,7 +63,7 @@ const RECENT_ACTIVITY = [
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<DashboardProfile | null>(null);
   const [savedNotesCount, setSavedNotesCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -94,9 +98,11 @@ export default function DashboardPage() {
           .eq("id", user.id)
           .single();
 
-        if (profileData) {
-          setProfile(profileData as Profile);
-        }
+        setProfile({
+          full_name: profileData?.full_name || user.user_metadata?.full_name || "Student",
+          class_name: profileData?.class_name || user.user_metadata?.class_name || "",
+          school: profileData?.school || "",
+        });
 
         const { count } = await supabase
           .from("saved_notes")

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { CheckCircle, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { ClassName } from "@/types";
 
@@ -38,6 +38,7 @@ export default function SignupPage() {
     confirmPassword: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const router = useRouter();
 
   const validate = () => {
@@ -81,6 +82,7 @@ export default function SignupPage() {
         email: email.trim(),
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             full_name: fullName.trim(),
             class_name: selectedClass,
@@ -93,21 +95,9 @@ export default function SignupPage() {
         return;
       }
 
-      if (data.user?.id && selectedClass) {
-        const { error: profileError } = await supabase.from("profiles").insert({
-          id: data.user.id,
-          full_name: fullName.trim(),
-          class_name: selectedClass,
-          state: "Rajasthan",
-        });
-
-        if (profileError) {
-          setErrors((prev) => ({
-            ...prev,
-            email: profileError.message,
-          }));
-          return;
-        }
+      if (data.user && !data.session) {
+        setShowSuccess(true);
+        return;
       }
 
       router.push("/dashboard");
@@ -120,6 +110,33 @@ export default function SignupPage() {
       setIsLoading(false);
     }
   };
+
+  if (showSuccess) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#FAFAF8] px-4 py-8">
+        <div className="w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm text-center">
+          <CheckCircle className="mx-auto h-16 w-16 text-green-500" />
+          <h1
+            className="mt-6 text-2xl font-bold text-[#111111]"
+            style={{ fontFamily: "'Playfair Display', serif" }}
+          >
+            Email Bheja Gaya! ✅
+          </h1>
+          <p className="mt-4 text-sm text-gray-600">
+            Humne <span className="font-semibold text-[#111111]">{email}</span> pe confirmation link bheja hai.
+          </p>
+          <p className="mt-2 text-sm text-gray-500">Email kholke link pe click karo.</p>
+          <p className="mt-1 text-sm text-gray-400">Spam folder bhi check karo.</p>
+          <Link
+            href="/login"
+            className="mt-8 inline-block w-full rounded-xl bg-[#D4AF37] py-3 font-bold text-[#111111] transition-all hover:bg-yellow-400"
+          >
+            Login Karo
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#FAFAF8] px-4 py-8">

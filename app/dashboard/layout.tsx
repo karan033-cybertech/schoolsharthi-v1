@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -30,6 +31,23 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [displayName, setDisplayName] = useState("Student");
+  const [displayClass, setDisplayClass] = useState("");
+  const [avatarLetter, setAvatarLetter] = useState("S");
+
+  useEffect(() => {
+    async function loadUser() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const name = user?.user_metadata?.full_name || "Student";
+      const letter = name[0]?.toUpperCase() || "S";
+      const className = user?.user_metadata?.class_name || "";
+      setDisplayName(name);
+      setAvatarLetter(letter);
+      setDisplayClass(className);
+    }
+    loadUser();
+  }, []);
 
   const isActive = (href: string, exact: boolean) => {
     if (exact) return pathname === href;
@@ -64,11 +82,13 @@ export default function DashboardLayout({
 
         <div className="mx-4 mb-2 mt-5 flex items-center gap-3 rounded-2xl bg-white/10 p-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-lg font-bold text-black">
-            A
+            {avatarLetter}
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">Arjun Kumar</p>
-            <p className="mt-0.5 text-xs text-gray-400">Class 10 · Student</p>
+            <p className="text-sm font-semibold text-white">{displayName}</p>
+            <p className="mt-0.5 text-xs text-gray-400">
+              {displayClass ? `Class ${displayClass} · Student` : "Student"}
+            </p>
           </div>
         </div>
 
