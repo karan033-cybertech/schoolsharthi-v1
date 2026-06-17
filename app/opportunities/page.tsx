@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Award,
@@ -25,6 +24,7 @@ type OpportunityItem = {
   description: string;
   class_range: string;
   deadline: string;
+  apply_url?: string;
   icon: "trophy" | "flask" | "award" | "calculator" | "indian-rupee" | "landmark";
   color: "yellow" | "blue" | "green" | "purple" | "orange" | "red";
 };
@@ -160,6 +160,7 @@ function mapDbOpportunity(opp: Opportunity): OpportunityItem {
     description: opp.description,
     class_range: opp.class_range ?? "",
     deadline: opp.deadline,
+    apply_url: opp.apply_url,
     icon: TYPE_ICON_MAP[opp.type],
     color: TYPE_COLOR_MAP[opp.type],
   };
@@ -173,6 +174,84 @@ function OpportunitiesContent() {
   const [opportunities, setOpportunities] =
     useState<OpportunityItem[]>(OPPORTUNITIES);
   const [isLoading, setIsLoading] = useState(true);
+  const [applied, setApplied] = useState<Record<string, boolean>>({});
+  const [applying, setApplying] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadApplied() {
+      try {
+        const supabase = createClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user || !isMounted) return;
+
+        const { data, error } = await supabase
+          .from("opportunity_applications")
+          .select("opportunity_id")
+          .eq("user_id", user.id);
+
+        if (error) {
+          console.error("Failed to load applied opportunities:", error.message);
+          return;
+        }
+
+        if (data && isMounted) {
+          const appliedMap: Record<string, boolean> = {};
+          data.forEach((row) => {
+            appliedMap[row.opportunity_id] = true;
+          });
+          setApplied(appliedMap);
+        }
+      } catch (error) {
+        console.error("Error in loadApplied:", error);
+      }
+    }
+    void loadApplied();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleApply = async (oppId: string, applyUrl?: string) => {
+    if (applying[oppId]) return;
+
+    try {
+      const supabase = createClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        alert("Apply karne ke liye pehle login karo!");
+        return;
+      }
+
+      setApplying((prev) => ({ ...prev, [oppId]: true }));
+
+      const { error } = await supabase.from("opportunity_applications").upsert({
+        user_id: user.id,
+        opportunity_id: oppId,
+        status: "applied",
+      });
+
+      if (error) {
+        console.error("Failed to apply for opportunity:", error.message);
+        alert("Apply karne mein error aayi. Kripya thodi der baad try karein.");
+        return;
+      }
+
+      setApplied((prev) => ({ ...prev, [oppId]: true }));
+
+      if (applyUrl) {
+        window.open(applyUrl, "_blank");
+      } else {
+        alert("Apply kar diya! Dashboard mein dekh sakte ho.");
+      }
+    } catch (error) {
+      console.error("Error in handleApply:", error);
+      alert("Kuch gadbad ho gayi. Kripya thodi der baad try karein.");
+    } finally {
+      setApplying((prev) => ({ ...prev, [oppId]: false }));
+    }
+  };
 
   useEffect(() => {
     if (typeParam && FILTER_PILLS.some((pill) => pill.value === typeParam)) {
@@ -328,12 +407,32 @@ function OpportunitiesContent() {
                   </div>
                 </div>
 
-                <Link
-                  href={`/ai-guide?q=${encodeURIComponent(opp.title)}`}
-                  className="shrink-0 whitespace-nowrap rounded-xl border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#111111] transition-all hover:bg-[#111111] hover:text-white"
-                >
-                  View Details →
-                </Link>
+                <div className="flex shrink-0 flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleApply(opp.id, opp.apply_url)}
+                    disabled={applying[opp.id]}
+                    className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                      applied[opp.id]
+                        ? "border border-green-200 bg-green-50 text-green-600"
+                        : "bg-[#111111] text-white hover:bg-gray-800"
+                    } ${applying[opp.id] ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {applying[opp.id] ? "Applying..." : applied[opp.id] ? "✓ Applied!" : "Apply Now →"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.open(
+                        `/ai-guide?q=${encodeURIComponent(opp.title + " ke baare mein batao")}`,
+                        "_self"
+                      )
+                    }
+                    className="whitespace-nowrap rounded-xl border border-[#E5E7EB] px-4 py-2 text-xs font-medium text-gray-500 transition-all hover:border-[#D4AF37] hover:text-[#D4AF37]"
+                  >
+                    AI se Pucho →
+                  </button>
+                </div>
               </article>
             );
           })
