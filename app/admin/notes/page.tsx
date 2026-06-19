@@ -79,18 +79,29 @@ export default function AdminNotesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Ye note delete karna chahte ho?")) return;
+    // Browser confirm() ko replace karo
+    const confirmed = window.confirm('Ye note delete karna chahte ho?')
+    if (!confirmed) return
+    
     try {
-      const { error } = await supabase.from("notes").delete().eq("id", id);
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', id)
+      
       if (error) {
-        console.error("Failed to delete note:", error.message);
-        alert("Delete karne mein error aayi: " + error.message);
-        return;
+        console.error('Delete error:', error)
+        alert('Delete error: ' + error.message)
+        return
       }
-      fetchNotes();
+      
+      // Local state update karo — refetch mat karo
+      setNotes(prev => prev.filter(note => note.id !== id))
+      alert('Note delete ho gaya!')
+      
     } catch (err) {
-      console.error("Error in handleDelete:", err);
-      alert("Kuch gadbad ho gayi. Thodi der baad try karo.");
+      console.error('Unexpected error:', err)
+      alert('Unexpected error occurred!')
     }
   };
 

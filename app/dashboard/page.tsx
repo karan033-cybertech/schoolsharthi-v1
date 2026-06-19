@@ -22,49 +22,61 @@ type DashboardProfile = {
   school: string;
 };
 
-const RECENT_ACTIVITY = [
-  {
-    icon: BookOpen,
-    iconBg: "bg-blue-50",
-    iconColor: "text-blue-500",
-    text: "Saved note: Life Processes",
-    time: "2 hours ago",
-    badge: "Notes",
-    badgeClass: "bg-blue-50 text-blue-600",
-  },
-  {
-    icon: MessageSquare,
-    iconBg: "bg-purple-50",
-    iconColor: "text-purple-500",
-    text: "Asked AI: Photosynthesis kya hai?",
-    time: "5 hours ago",
-    badge: "AI Guide",
-    badgeClass: "bg-purple-50 text-purple-600",
-  },
-  {
-    icon: Trophy,
-    iconBg: "bg-yellow-50",
-    iconColor: "text-yellow-500",
-    text: "Applied for: INSPIRE Award 2024",
-    time: "1 day ago",
-    badge: "Opportunity",
-    badgeClass: "bg-[#FDF6EE] text-[#D4AF37]",
-  },
-  {
-    icon: Compass,
-    iconBg: "bg-green-50",
-    iconColor: "text-green-500",
-    text: "Explored career: Doctor",
-    time: "2 days ago",
-    badge: "Career",
-    badgeClass: "bg-green-50 text-green-600",
-  },
-];
+const timeAgo = (dateStr: string) => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 60) return `${Math.max(0, mins)} minutes ago`;
+  if (hours < 24) return `${hours} hours ago`;
+  return `${days} days ago`;
+};
+
+const getActivityStyle = (type: string) => {
+  switch (type) {
+    case 'note':
+      return {
+        icon: BookOpen,
+        iconBg: "bg-blue-50",
+        iconColor: "text-blue-500",
+        badgeClass: "bg-blue-50 text-blue-600",
+      };
+    case 'ai':
+      return {
+        icon: MessageSquare,
+        iconBg: "bg-purple-50",
+        iconColor: "text-purple-500",
+        badgeClass: "bg-purple-50 text-purple-600",
+      };
+    case 'opportunity':
+      return {
+        icon: Trophy,
+        iconBg: "bg-yellow-50",
+        iconColor: "text-yellow-500",
+        badgeClass: "bg-[#FDF6EE] text-[#D4AF37]",
+      };
+    default:
+      return {
+        icon: Compass,
+        iconBg: "bg-green-50",
+        iconColor: "text-green-500",
+        badgeClass: "bg-green-50 text-green-600",
+      };
+  }
+};
 
 export default function DashboardPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
-  const [savedNotesCount, setSavedNotesCount] = useState(0);
+  const [stats, setStats] = useState({
+    notesSaved: 0,
+    questionsAsked: 0,
+    opportunitiesApplied: 0,
+    daysActive: 1,
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [savedNotes, setSavedNotes] = useState<any[]>([]);
+  const [recommendedOpps, setRecommendedOpps] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const displayName = profile?.full_name || "Student";
@@ -104,13 +116,135 @@ export default function DashboardPage() {
           school: profileData?.school || "",
         });
 
-        const { count } = await supabase
-          .from("saved_notes")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id);
+        // Notes Saved — real count
+        const { count: notesCount } = await supabase
+          .from('saved_notes')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
 
-        setSavedNotesCount(count ?? 0);
-      } catch {
+        // Questions Asked — ai_chat_history se real count
+        const { count: chatCount } = await supabase
+          .from('ai_chat_history')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+
+        // Opportunities Applied — real count
+        const { count: oppCount } = await supabase
+          .from('opportunity_applications')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+
+        // Days Active — account creation se calculate karo
+        const createdAt = new Date(user.created_at);
+        const today = new Date();
+        const daysActive = Math.max(1, Math.floor(
+          (today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
+        ));
+
+        setStats({
+          notesSaved: notesCount || 0,
+          questionsAsked: chatCount || 0,
+          opportunitiesApplied: oppCount || 0,
+          daysActive: daysActive
+        });
+
+        // Real recent activity — combine karo teen sources se
+        const activities: any[] = [];
+
+        // Saved notes
+        const { data: recentSaved } = await supabase
+          .from('saved_notes')
+          .select('created_at, notes(title)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(2);
+
+        recentSaved?.forEach(item => {
+          activities.push({
+            type: 'note',
+            text: `Saved note: ${(item.notes as any)?.title || 'Unknown'}`,
+            time: item.created_at,
+            badge: 'Notes',
+            color: 'blue'
+          });
+        });
+
+        // AI Chat history
+        const { data: recentChats } = await supabase
+          .from('ai_chat_history')
+          .select('question, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(2);
+
+        recentChats?.forEach(item => {
+          activities.push({
+            type: 'ai',
+            text: `Asked AI: ${item.question.substring(0, 40)}...`,
+            time: item.created_at,
+            badge: 'AI Guide',
+            color: 'purple'
+          });
+        });
+
+        // Opportunity applications
+        const { data: recentApps } = await supabase
+          .from('opportunity_applications')
+          .select('applied_at, opportunities(title)')
+          .eq('user_id', user.id)
+          .order('applied_at', { ascending: false })
+          .limit(2);
+
+        recentApps?.forEach(item => {
+          activities.push({
+            type: 'opportunity',
+            text: `Applied for: ${(item.opportunities as any)?.title || 'Unknown'}`,
+            time: item.applied_at,
+            badge: 'Opportunity',
+            color: 'yellow'
+          });
+        });
+
+        // Sort by time — latest first
+        activities.sort((a, b) => 
+          new Date(b.time).getTime() - new Date(a.time).getTime()
+        );
+
+        setRecentActivity(activities.slice(0, 4));
+
+        // Real saved notes fetch karo
+        const { data: savedNotesData } = await supabase
+          .from('saved_notes')
+          .select(`
+            note_id,
+            notes (
+              id,
+              title,
+              subject,
+              class_name
+            )
+          `)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(2);
+
+        setSavedNotes(savedNotesData || []);
+
+        const studentClass = parseInt(profileData?.class_name || '10');
+
+        // Opportunities fetch — class match karo
+        const { data: recommendedOpps } = await supabase
+          .from('opportunities')
+          .select('*')
+          .eq('is_published', true)
+          .lte('min_class', studentClass)  // min_class <= student class
+          .gte('max_class', studentClass)  // max_class >= student class
+          .limit(2);
+
+        setRecommendedOpps(recommendedOpps || []);
+
+      } catch (err) {
+        console.error(err);
         router.push("/login");
       } finally {
         setIsLoading(false);
@@ -198,66 +332,48 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition-all hover:shadow-md">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-4xl font-bold text-[#111111]">{savedNotesCount}</p>
+                  <p className="text-4xl font-bold text-[#111111]">{stats.notesSaved}</p>
                   <p className="mt-1 text-sm text-gray-500">Notes Saved</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50">
                   <BookOpen className="h-5 w-5 text-blue-500" />
                 </div>
               </div>
-              <div className="mt-4 border-t border-[#F3F4F6] pt-3">
-                <p className="flex items-center gap-1 text-xs font-medium text-green-500">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  +3 this week
-                </p>
-              </div>
             </div>
 
             <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition-all hover:shadow-md">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-4xl font-bold text-[#111111]">18</p>
+                  <p className="text-4xl font-bold text-[#111111]">{stats.questionsAsked}</p>
                   <p className="mt-1 text-sm text-gray-500">Questions Asked</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50">
                   <MessageSquare className="h-5 w-5 text-purple-500" />
                 </div>
               </div>
-              <div className="mt-4 border-t border-[#F3F4F6] pt-3">
-                <p className="flex items-center gap-1 text-xs font-medium text-green-500">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  +5 this week
-                </p>
-              </div>
             </div>
 
             <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition-all hover:shadow-md">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-4xl font-bold text-[#111111]">5</p>
+                  <p className="text-4xl font-bold text-[#111111]">{stats.opportunitiesApplied}</p>
                   <p className="mt-1 text-sm text-gray-500">Opportunities Applied</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FDF6EE]">
                   <Trophy className="h-5 w-5 text-[#D4AF37]" />
                 </div>
               </div>
-              <div className="mt-4 border-t border-[#F3F4F6] pt-3">
-                <p className="text-xs font-medium text-orange-500">2 pending</p>
-              </div>
             </div>
 
             <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition-all hover:shadow-md">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-4xl font-bold text-[#111111]">7</p>
+                  <p className="text-4xl font-bold text-[#111111]">{stats.daysActive}</p>
                   <p className="mt-1 text-sm text-gray-500">Days Active</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50">
                   <Flame className="h-5 w-5 text-orange-500" />
                 </div>
-              </div>
-              <div className="mt-4 border-t border-[#F3F4F6] pt-3">
-                <p className="text-xs font-medium text-orange-500">🔥 Keep it up!</p>
               </div>
             </div>
           </div>
@@ -279,92 +395,80 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-4 space-y-3">
-              <div className="flex cursor-pointer items-center gap-4 rounded-xl border border-[#E5E7EB] bg-[#FAFAF8] p-4 transition-all hover:border-[#D4AF37]/30">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50">
-                  <BookOpen className="h-5 w-5 text-blue-500" />
+              {savedNotes.length === 0 ? (
+                <div className="text-center py-6 bg-[#FAFAF8] rounded-xl border border-[#E5E7EB]">
+                  <p className="text-sm text-gray-500">No saved notes yet.</p>
+                  <Link href="/notes" className="text-xs text-[#D4AF37] font-medium mt-2 block hover:underline">
+                    Browse Notes →
+                  </Link>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[#111111]">Life Processes</p>
-                  <p className="mt-0.5 text-xs text-gray-400">Science · Class 10</p>
-                  <div className="mt-2 h-1.5 w-full rounded-full bg-[#E5E7EB]">
-                    <div className="h-1.5 w-[60%] rounded-full bg-[#D4AF37]" />
+              ) : (
+                savedNotes.map((item: any) => (
+                  <div key={item.note_id} className="bg-[#FAFAF8] rounded-xl p-4 border border-[#E5E7EB]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                        <BookOpen className="w-5 h-5 text-blue-500" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-sm text-[#111111]">{item.notes?.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {item.notes?.subject} · Class {item.notes?.class_name}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <span className="shrink-0 text-xs font-bold text-[#D4AF37]">60%</span>
-              </div>
-
-              <div className="flex cursor-pointer items-center gap-4 rounded-xl border border-[#E5E7EB] bg-[#FAFAF8] p-4 transition-all hover:border-[#D4AF37]/30">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50">
-                  <Calculator className="h-5 w-5 text-orange-500" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-[#111111]">Trigonometry</p>
-                  <p className="mt-0.5 text-xs text-gray-400">Maths · Class 11</p>
-                  <div className="mt-2 h-1.5 w-full rounded-full bg-[#E5E7EB]">
-                    <div className="h-1.5 w-[35%] rounded-full bg-[#D4AF37]" />
-                  </div>
-                </div>
-                <span className="shrink-0 text-xs font-bold text-[#D4AF37]">35%</span>
-              </div>
+                ))
+              )}
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-            <h2 className="text-base font-bold text-[#111111]">Recommended for You</h2>
-            <p className="mt-1 text-xs text-gray-400">Based on your interests.</p>
-
-            <div className="mt-4 flex items-center gap-4 rounded-xl border border-[#D4AF37]/20 bg-gradient-to-r from-[#FDF6EE] to-white p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-50 p-2 text-yellow-500">
-                <Trophy className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[#111111]">
-                  INSPIRE Award – MANAK 2024
-                </p>
-                <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
-                  <Calendar className="h-3 w-3" />
-                  Deadline: 30 June 2024
-                </p>
-                <Link
-                  href="/opportunities"
-                  className="mt-2 inline-block text-xs font-medium text-[#D4AF37] hover:underline"
-                >
-                  View Details →
-                </Link>
-              </div>
+          <section className="rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm space-y-3">
+            <div>
+              <h2 className="text-base font-bold text-[#111111]">Recommended for You</h2>
+              <p className="mt-1 text-xs text-gray-400">Based on your interests.</p>
             </div>
 
-            <div className="mt-3 flex items-center gap-4 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 p-2 text-blue-500">
-                <Stethoscope className="h-5 w-5" />
+            {recommendedOpps.length === 0 ? (
+              <div className="text-center py-6 bg-[#FAFAF8] rounded-xl border border-[#E5E7EB]">
+                <p className="text-sm text-gray-500">No recommended opportunities found.</p>
               </div>
-              <div>
-                <p className="text-sm font-semibold text-[#111111]">Doctor</p>
-                <p className="text-xs text-gray-500">Based on your Science interest</p>
-                <Link
-                  href="/careers/doctor"
-                  className="mt-2 inline-block text-xs font-medium text-blue-500 hover:underline"
-                >
-                  Explore Career →
-                </Link>
-              </div>
-            </div>
+            ) : (
+              recommendedOpps.map((opp: any) => (
+                <div key={opp.id} className="flex items-center gap-4 rounded-xl border border-[#D4AF37]/20 bg-gradient-to-r from-[#FDF6EE] to-white p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-50 p-2 text-yellow-500">
+                    <Trophy className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[#111111]">{opp.title}</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
+                      <Calendar className="h-3 w-3" />
+                      Deadline: {opp.deadline}
+                    </p>
+                    <Link
+                      href="/opportunities"
+                      className="mt-2 inline-block text-xs font-medium text-[#D4AF37] hover:underline"
+                    >
+                      View Details →
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
 
-            <div className="mt-3 flex items-center gap-4 rounded-xl border border-green-100 bg-gradient-to-r from-green-50 to-white p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 p-2 text-green-500">
-                <BookOpen className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[#111111]">
-                  Human Eye and Colourful World
-                </p>
-                <p className="text-xs text-gray-500">Science · Class 10</p>
-                <Link
-                  href="/notes"
-                  className="mt-2 inline-block text-xs font-medium text-green-500 hover:underline"
-                >
-                  Read Now →
-                </Link>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <Compass className="w-5 h-5 text-blue-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-[#111111]">Explore Careers</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Discover career paths that match your interests
+                  </p>
+                  <Link href="/careers" className="text-xs text-blue-500 font-medium mt-1 block hover:underline">
+                    View All Careers →
+                  </Link>
+                </div>
               </div>
             </div>
           </section>
@@ -378,29 +482,42 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <ul className="mt-4">
-            {RECENT_ACTIVITY.map((item) => (
-              <li
-                key={item.text}
-                className="flex cursor-pointer items-center gap-4 rounded-xl border-b border-[#F3F4F6] px-2 py-3.5 transition-all last:border-0 hover:bg-[#FAFAF8]"
-              >
-                <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.iconBg}`}
-                >
-                  <item.icon className={`h-4 w-4 ${item.iconColor}`} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-[#111111]">{item.text}</p>
-                  <p className="mt-0.5 text-xs text-gray-400">{item.time}</p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${item.badgeClass}`}
-                >
-                  {item.badge}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {recentActivity.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-400 text-sm">No activity yet.</p>
+              <p className="text-gray-400 text-xs mt-1">
+                Try asking the AI Guide a question or save a note!
+              </p>
+            </div>
+          ) : (
+            <ul className="mt-4">
+              {recentActivity.map((item: any, idx: number) => {
+                const style = getActivityStyle(item.type);
+                const IconComponent = style.icon;
+                return (
+                  <li
+                    key={idx}
+                    className="flex cursor-pointer items-center gap-4 rounded-xl border-b border-[#F3F4F6] px-2 py-3.5 transition-all last:border-0 hover:bg-[#FAFAF8]"
+                  >
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${style.iconBg}`}
+                    >
+                      <IconComponent className={`h-4 w-4 ${style.iconColor}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-[#111111]">{item.text}</p>
+                      <p className="mt-0.5 text-xs text-gray-400">{timeAgo(item.time)}</p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${style.badgeClass}`}
+                    >
+                      {item.badge}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </div>
     </div>

@@ -19,7 +19,7 @@ const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/profile", label: "My Profile", icon: User, exact: false },
   { href: "/notes", label: "Saved Notes", icon: BookOpen, exact: false },
-  { href: "/ai-guide", label: "My Questions", icon: MessageSquare, exact: false },
+  { href: "/ai-guide", label: "Ask AI Guide", icon: MessageSquare, exact: false },
   { href: "/opportunities", label: "Opportunities", icon: Trophy, exact: false },
   { href: "/dashboard", label: "Settings", icon: Settings, exact: false },
 ];

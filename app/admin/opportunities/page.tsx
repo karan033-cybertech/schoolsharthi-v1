@@ -86,18 +86,25 @@ export default function AdminOpportunitiesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Ye opportunity delete karna chahte ho?")) return;
+    const confirmed = window.confirm('Ye opportunity delete karna chahte ho?')
+    if (!confirmed) return
+    
     try {
-      const { error } = await supabase.from("opportunities").delete().eq("id", id);
+      const { error } = await supabase
+        .from('opportunities')
+        .delete()
+        .eq('id', id)
+      
       if (error) {
-        console.error("Failed to delete opportunity:", error.message);
-        alert("Delete karne mein error aayi: " + error.message);
-        return;
+        alert('Delete error: ' + error.message)
+        return
       }
-      fetchOpportunities();
+      
+      setOpportunities(prev => prev.filter(opp => opp.id !== id))
+      alert('Opportunity delete ho gayi!')
+      
     } catch (err) {
-      console.error("Error in handleDelete:", err);
-      alert("Kuch gadbad ho gayi. Thodi der baad try karo.");
+      alert('Unexpected error!')
     }
   };
 
